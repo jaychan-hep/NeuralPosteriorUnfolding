@@ -32,7 +32,7 @@ def MADE(data_shape, cond_shape):
     made = tfb.AutoregressiveNetwork(params=2, 
                                      hidden_units=[16,16], #To be changed when using bigger histograms
                                      event_shape=data_shape,
-                                     activation='sigmoid',
+                                     activation='swish',
                                      conditional=True,
                                      conditional_event_shape=cond_shape,
                                     )
@@ -46,7 +46,7 @@ def MADE(data_shape, cond_shape):
     log_prob_ = distribution.log_prob(x_, bijector_kwargs={'conditional_input': c_})
     model = tfk.Model([x_,c_], log_prob_)
 
-    model.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-3),loss=lambda _, log_prob: -log_prob)
+    model.compile(optimizer=tf.optimizers.Adam(learning_rate=1e-2),loss=lambda _, log_prob: -log_prob)
     return model, distribution
 
     batch_size = 512
@@ -62,6 +62,16 @@ def MADE(data_shape, cond_shape):
     samples = distribution.sample(data.shape, bijector_kwargs={'conditional_input': cond_eval})
     return samples 
 
+def MLE(model,ymes,ndim):
+    x = tf.Variable(ndim*[1.0/ndim])
+    loss = lambda: -model.log_prob(x, bijector_kwargs={'conditional_input': ymes})
+    losses = tfp.math.minimize(loss,
+                               num_steps=200,
+                               #convergence_criterion=(
+                               #     tfp.optimizers.convergence_criteria.LossNotDecreasing(atol=0.001)),
+                               trainable_variables=[x],
+                               optimizer=tf.optimizers.Adam(learning_rate=0.01))
+    return x
 
 
 def NPU(ymes,Rin,N):
@@ -108,6 +118,8 @@ def NPU(ymes,Rin,N):
     #plt.xlabel("epochs")
     #plt.ylabel("loss")
 
-
-    output = dist.sample(nsample, bijector_kwargs={'conditional_input': np.tile(ymes/float(nx),nsample).reshape([nsample,len(ymes)])}).numpy()
-    return output*ny
+    #mle = MLE(dist,ymes/float(nx),y.shape[-1])
+    #print(mle)
+    mle = MLE(dist,ymes/float(nx),y.shape[-1]).numpy()    
+    output = dist.sample(nsample, bijector_kwargs={'conditional_input': np.tile(ymes/float(nx),nsample).reshape([nsample,len(ymes)])}).numpy()    
+    return output*ny,mle*ny
